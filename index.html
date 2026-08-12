@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Canvas Dice Game</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-top: 20px;
+            background-color: #f4f4f9;
+        }
+        canvas {
+            border: 2px solid #333;
+            background-color: #fff;
+            box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .controls {
+            margin-top: 15px;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            font-weight: bold;
+            margin: 0 10px;
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+            background-color: #007bff;
+            color: white;
+            transition: background 0.2s;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button:active {
+            background-color: #004085;
+        }
+        button.restart {
+            background-color: #28a745;
+        }
+        button.restart:hover {
+            background-color: #218838;
+        }
+    </style>
+</head>
+<body>
+
+    <canvas id="canvas" width="600" height="300"></canvas>
+
+    <div class="controls">
+        <button onclick="Play()">Roll / Play</button>
+        <button onclick="CashIn()">Cash In</button>
+        <button class="restart" onclick="InitGame()">Restart Game</button>
+    </div>
+
+    <script>
+        window.onload = function() {
+            InitGame();
+        };
+
+        var canvas = document.getElementById('canvas');
+        var ctx = canvas.getContext('2d');
+
+        // --- Layout and Sizing Constants ---
+        const SIZE = 80;  
+        const GAP = 20;   
+        const TOTAL_DICE_WIDTH = (SIZE * 5) + (GAP * 4);
+        
+        const LEFT = (canvas.width / 2) - (TOTAL_DICE_WIDTH / 2);
+        const TOP = (canvas.height / 2) - (SIZE / 2);
+        const OFFSET = SIZE + GAP;
+
+        const RDS = 6;  
+        const DICECOLOR = ['red','blue','black','green'];
+
+        const MAXMONEY = 200;
+
+        var Keep = [true, true, true, true, true];
+        var dice = [];
+
+        var moveSeq = {playFirst:0, playSecond:1, cashIn:2, noPlay:3, gameStopped:4};
+        var playSeq = moveSeq.playFirst;
+        var money;
+        var score;
+        var totalMoves = 0;
+
+        function InitGame() {
+            canvas.removeEventListener('click', clickReporter, false);
+            canvas.addEventListener('click', clickReporter, false);
+                
+            for (let i = 0; i < 5; i++) {
+                dice[i] = new diceObject(LEFT + (OFFSET * i), TOP, "black", 6);
+            }
+            
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            for (let i = 0; i < 5; i++) {
+                dice[i].draw();
+            }
+            
+            resetReporter();
+                
+            money = 100;
+            score = 0;
+            totalMoves = 0;
+            
+            showMoney();
+            showScore();
+            playSeq = moveSeq.playFirst;
+        }
+
+        function GameOver() {
+            if (money >= MAXMONEY) {
+                playSeq = moveSeq.gameStopped;
+                alert("Game over: You doubled your money in " + totalMoves + " moves");
+            }
+        }
+
+        function Play() {
+            if (playSeq !== moveSeq.noPlay && playSeq !== moveSeq.gameStopped) {
+                // When starting a fresh roll sequence, clear hold indicators
+                if (playSeq === moveSeq.playFirst || playSeq === moveSeq.cashIn) {
+                    resetReporter();
+                }
+
+                RollDice();
+
+                if (playSeq === moveSeq.playFirst || playSeq === moveSeq.cashIn) {
+                    playSeq = moveSeq.playSecond;
+                } else if (playSeq === moveSeq.playSecond) {
+                    playSeq = moveSeq.noPlay;
+                }
+            }
+        }
+
+        function CashIn() {
+            if (playSeq === moveSeq.cashIn || playSeq === moveSeq.gameStopped) return;
+            
+            // If score is 0, reset for play without costing $2
+            if (score === 0) {
+                resetReporter();
+                playSeq = moveSeq.playFirst;
+                return;
+            }
+
+            resetReporter();
+            playSeq = moveSeq.cashIn;
+            money += score;
+            money -= 2;
+            resetScore();
+            showMoney();
+            totalMoves++;
+            GameOver();
+        }
+
+        function showMoney() {
+            ctx.clearRect(10, 5, 150, 30);
+            ctx.fillStyle = 'black';
+            ctx.font = "bold 20px Arial";
+            ctx.textAlign = "left";
+            ctx.fillText("Money: " + money, 10, 25);
+        }
+
+        function showScore() {
+            ctx.clearRect(canvas.width - 160, 5, 150, 30);
+            ctx.fillStyle = 'black';
+            ctx.font = "bold 20px Arial";
+            ctx.textAlign = "right";
+            ctx.fillText("Score: " + score, canvas.width - 10, 25);
+        }
+
+        function resetScore() {
+            score = 0;
+            showScore();
+        }
+
+        var count = 0;
+        function RollDice() {
+            count = 0;
+            var id = setInterval(frame, 1000/60);
+            function frame() {
+                for (let i = 0; i < 5; i++) {
+                    if (Keep[i]) dice[i].roll();
+                }
+                count++;
+                if (count > 51) {
+                    clearInterval(id);
+                    updateScore();
+                }
+            }
+        }
+
+        function drawHoldIndicator(index, fill) {
+            const centerX = dice[index].x + (SIZE / 2);
+            const indicatorY = TOP + SIZE + 15;
+            const size = 10;
+            ctx.clearRect(centerX - (size/2), indicatorY - (size/2), size, size);
+            if (fill) {
+                ctx.fillStyle = 'red';
+                ctx.fillRect(centerX - (size/2), indicatorY - (size/2), size, size);
+            }
+        }
+
+        function resetReporter() {
+            for (let i = 0; i < 5; i++) {
+                Keep[i] = true;
+                drawHoldIndicator(i, false);
+            }
+        }
+
+        function clickReporter(e) {
+            var rect = canvas.getBoundingClientRect();
+            var mx = e.clientX - rect.left;
+            var my = e.clientY - rect.top;
+
+            for (let i = 0; i < 5; i++) {
+                const dX = dice[i].x;
+                if (mx > dX && mx < dX + SIZE && my > TOP && my < TOP + SIZE) {
+                    Keep[i] = !Keep[i];
+                    drawHoldIndicator(i, !Keep[i]);
+                    break;
+                }
+            }
+        }
+
+        var diceObject = function (x, y, color, face) {
+            this.x = x;
+            this.y = y;
+            this.color = color;
+            this.face = face;
+            this.draw = function() {
+                ctx.clearRect(this.x - 2, this.y - 2, SIZE + 4, SIZE + 4);
+                ctx.strokeStyle = "black";
+                ctx.lineWidth = 2;
+                ctx.strokeRect(this.x, this.y, SIZE, SIZE);
+                ctx.fillStyle = "white"; 
+                ctx.fillRect(this.x, this.y, SIZE, SIZE);
+                ctx.fillStyle = this.color;
+                
+                const quarter = SIZE / 4;
+                const center = SIZE / 2;
+                const threeQuarter = quarter * 3;
+
+                switch(this.face) {
+                    case 1:
+                        this.drawDot(center, center);
+                        break;
+                    case 2:
+                        this.drawDot(quarter, quarter);
+                        this.drawDot(threeQuarter, threeQuarter);
+                        break;
+                    case 3:
+                        this.drawDot(quarter, quarter);
+                        this.drawDot(center, center);
+                        this.drawDot(threeQuarter, threeQuarter);
+                        break;
+                    case 4:
+                        this.drawDot(quarter, quarter);
+                        this.drawDot(threeQuarter, quarter);
+                        this.drawDot(threeQuarter, threeQuarter);
+                        this.drawDot(quarter, threeQuarter);
+                        break;
+                    case 5:
+                        this.drawDot(quarter, quarter);
+                        this.drawDot(threeQuarter, quarter);
+                        this.drawDot(center, center);
+                        this.drawDot(threeQuarter, threeQuarter);
+                        this.drawDot(quarter, threeQuarter);
+                        break;
+                    case 6:
+                        this.drawDot(quarter, quarter);
+                        this.drawDot(threeQuarter, quarter);
+                        this.drawDot(threeQuarter, center);
+                        this.drawDot(threeQuarter, threeQuarter);
+                        this.drawDot(quarter, center);
+                        this.drawDot(quarter, threeQuarter);
+                        break;
+                }
+            }
+            this.drawDot = function(relX, relY) {
+                ctx.beginPath();
+                ctx.arc(this.x + relX, this.y + relY, RDS, 0, 2 * Math.PI);
+                ctx.fill();
+            }
+            this.update = function(n) {
+                this.face = n;
+                this.draw();
+            }
+            this.roll = function() {
+                this.face = Math.floor(Math.random()*6+1);
+                this.color = DICECOLOR[Math.floor(Math.random()*4)];
+                this.draw();
+            }
+            this.getValue = function() { return this.face;}
+            this.getColor = function() { return this.color;}
+        }
+
+        function updateScore() {
+            score = 0;
+            var flag = true;
+            for (var i = 1; i < 5; i++) {
+                if (dice[i].getColor() !== dice[0].getColor()) {
+                    flag = false;
+                    break;
+                }
+            }
+            if (flag) { score += 20; }
+            
+            var s = [0,0,0,0,0,0];
+            for (var i = 0; i < 5; i++) {
+                s[dice[i].getValue()-1]++;
+            }
+
+            var strFlag = true;
+            var ar = [];
+            for (var i = 0; i < 5; i++) { ar[i] = dice[i].getValue(); }
+            ar.sort(function(a,b){return a-b;});
+            var v = ar[0] + 1;
+            for (var i = 1; i < 5; i++) {
+                if (ar[i] != v) { strFlag = false; break; }
+                v++;
+            }
+
+            var pairs = 0, threes = 0, fours = 0, fives = 0;
+            for (var i = 0; i < 6; i++) {
+                if (s[i] == 2) pairs++;
+                else if (s[i] == 3) threes++;
+                else if (s[i] == 4) fours++;
+                else if (s[i] == 5) fives++;
+            }
+
+            if (fives == 1) score += 20;
+            if (fours == 1) score += 8;
+            if (pairs == 1 && threes == 1) score += 8;
+            if (pairs == 2) score += 4;
+            if (threes == 1) score += 5;
+            if (strFlag) score += 12;
+
+            showScore();
+
+            // --- ZERO SCORE CHECK ---
+            // If second roll results in 0 score, unlock play for next turn
+            if (playSeq === moveSeq.noPlay && score === 0) {
+                playSeq = moveSeq.playFirst;
+            }
+        }
+    </script>
+</body>
+</html>
